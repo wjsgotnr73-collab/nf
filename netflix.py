@@ -1,77 +1,75 @@
 import requests
-from bs4 import BeautifulSoup
-import random
+import re
 
-def get_netflix_rank():
-    # 1. 비교적 크롤링이 잘 되는 넷플릭스 순위 사이트 (데이터 제공용)
-    url = "https://flixpatrol.com/top10/netflix/world/today/"
+def pharmacy_search_fixed():
+    # 님의 인증키 (그대로 유지)
+    service_key = "90577787f9dd0e6155ce016bc0d88bd3709a15b0206b98b3c5201119599ebdd4"
     
-    # 진짜 브라우저처럼 보이게 만드는 헤더 (매우 중요!)
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
-    }
-
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        # 2. 데이터 추출 (사이트 구조에 맞춘 최신 선택자)
-        # 테이블 내의 제목들을 가져옵니다.
-        movie_elements = soup.select('.table-main tr td.table-main-title')
-        
-        print(f"\n🌍 [실시간] 글로벌 넷플릭스 TOP 10")
-        print("=" * 45)
-
-        if not movie_elements:
-            # [비상용] 사이트 차단 시 작동하는 더미 데이터 (로직 테스트용)
-            print("⚠️ 실시간 연결 지연으로 인기작 리스트를 불러옵니다.")
-            titles = ["오징어 게임 시즌2", "지옥", "더 글로리", "킹덤", "스위트홈", "기생수", "피지컬:100", "아무도 없는 숲속에서", "살인자ㅇ난감", "마이 네임"]
-        else:
-            titles = [el.get_text().strip() for el in movie_elements[:10]]
-
-        # 3. 순위 출력
-        for i, title in enumerate(titles, 1):
-            print(f"{i:2}위: {title}")
-        
-        print("=" * 45)
-
-        # 4. 추천 및 다시 하기 실행
-        top1 = titles[0]
-        show_recommendation(top1)
-
-    except Exception as e:
-        print(f"❌ 접속 오류: {e}")
-
-def show_recommendation(top_movie):
-    # AI/명작 추천 리스트
-    classics = [
-        "브레이킹 배드 (스릴러/범죄)", 
-        "기묘한 이야기 (판타지/모험)", 
-        "블랙 미러 (SF/옴니버스)", 
-        "다크 (미스터리/시간여행)",
-        "퀸스 갬빗 (드라마/체스)"
-    ]
-    
-    print(f"\n🤖 AI 추천 비서")
-    print(f"현재 1위인 '{top_movie}'와(과) 함께")
-    print(f"인생 명작 '{random.choice(classics)}'도 정주행해보세요!")
-    print("-" * 45)
-
-    # 5. [요청하신 기능] 다시 하기 질문
-    ask_retry()
-
-def ask_retry():
     while True:
-        retry = input("넷플릭스 순위를 다시 조회하거나 다른 추천을 볼까요? (y/n): ").lower()
-        if retry == 'y':
-            get_netflix_rank()
+        print("\n" + "="*55)
+        print("🏥 실시간 약국 검색 (주소 오류 수정 버전)")
+        print("="*55)
+
+        city = input("📍 시/도 (예: 서울특별시): ").strip()
+        district = input("📍 구/군 (예: 강남구): ").strip()
+
+        if not city or not district:
+            continue
+
+        # [수정됨] API 엔드포인트 주소를 더 정확한 경로로 변경했습니다.
+        url = 'http://apis.data.go.kr/B552657/ErmctInfoInqireService/getPharmacyListInfoInqire'
+        
+        params = {
+            'serviceKey' : service_key,
+            'Q0' : city,
+            'Q1' : district,
+            'pageNo' : '1',
+            'numOfRows' : '10'
+        }
+
+        try:
+            print(f"📡 '{city} {district}' 조회 중...")
+            response = requests.get(url, params=params, timeout=10)
+            
+            # 디버깅용 (문제가 생기면 내용을 보기 위함)
+            content = response.text
+
+            if "API not found" in content:
+                print("❌ 여전히 주소 오류가 발생합니다. 다른 경로로 재시도합니다...")
+                # 백업 경로로 한 번 더 시도
+                url = 'http://apis.data.go.kr/B552657/ErmctInfoInqireService/getPharmacyLcinfoInqire'
+                response = requests.get(url, params=params, timeout=10)
+                content = response.text
+
+            # 데이터 쪼개기
+            items = content.split('<item>')
+            items = items[1:]
+
+            if not items:
+                print("❌ 검색 결과가 없습니다.")
+                print("메시지:", content) # 서버가 보내는 에러 메시지 직접 확인
+            else:
+                print(f"\n🔍 검색 결과 ({len(items)}곳):")
+                print("-" * 60)
+                for item in items:
+                    def extract(tag, xml):
+                        match = re.search(f'<{tag}>(.*?)</{tag}>', xml)
+                        return match.group(1) if match else "정보없음"
+                    
+                    name = extract('dutyName', item)
+                    tel = extract('dutyTel1', item)
+                    addr = extract('dutyAddr', item)
+                    
+                    print(f"▶ {name}\n   📞 {tel}\n   🏠 {addr}")
+                    print("-" * 60)
+
+        except Exception as e:
+            print(f"❌ 접속 오류: {e}")
+
+        print("\n더 알아보시겠습니까? (Y/N)")
+        if input(">> ").strip().upper() != 'Y':
+            print("👋 종료합니다!")
             break
-        elif retry == 'n':
-            print("즐거운 시청 되세요! 프로그램을 종료합니다. 👋")
-            exit()
-        else:
-            print("y 또는 n만 입력해주세요.")
 
 if __name__ == "__main__":
-    get_netflix_rank()
+    pharmacy_search_fixed()
